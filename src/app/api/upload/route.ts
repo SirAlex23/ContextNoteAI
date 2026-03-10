@@ -8,23 +8,17 @@ import officeparser from 'officeparser';
 
 export const runtime = 'nodejs';
 
-// --- OPTIMIZACIÓN: Singleton para el modelo de embeddings ---
 let extractor: any = null;
-
 const getExtractor = async () => {
-  if (!extractor) {
-    // Solo se carga la primera vez que se usa la herramienta
-    extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-  }
+  if (!extractor) extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
   return extractor;
 };
 
-// Aumentamos el tamaño a 2000 para que archivos largos (BOE) generen menos filas
-function createChunks(text: string, size: number = 2000) {
+// Chunks más grandes (4000) = menos ciclos de CPU = más velocidad
+function createChunks(text: string, size: number = 4000) {
   const chunks = [];
   const words = text.split(/\s+/);
   let currentChunk = "";
-
   for (const word of words) {
     if ((currentChunk + word).length > size) {
       chunks.push(currentChunk.trim());
@@ -37,66 +31,61 @@ function createChunks(text: string, size: number = 2000) {
 }
 
 export async function POST(req: NextRequest) {
+  const startTime = Date.now(); // Control de tiempo para evitar el corte de Vercel
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File;
     if (!file) return NextResponse.json({ error: "No hay archivo" }, { status: 400 });
 
-    // Obtenemos el extractor ya cargado en memoria
     const generateEmbedding = await getExtractor();
-
     const buffer = await file.arrayBuffer();
     const nodeBuffer = Buffer.from(buffer);
     let extractedText = "";
 
-    // --- Extracción por formato ---
+    // Extracción según formato
     if (file.type === "application/pdf") {
       const { text } = await extractText(buffer);
       extractedText = Array.isArray(text) ? text.join('\n') : text;
-    } 
-    else if (file.name.endsWith('.docx')) {
+    } else if (file.name.endsWith('.docx')) {
       const result = await mammoth.extractRawText({ buffer: nodeBuffer });
       extractedText = result.value;
-    } 
-    else if (file.name.endsWith('.xlsx')) {
-      const workbook = xlsx.read(nodeBuffer, { type: 'buffer' });
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      extractedText = xlsx.utils.sheet_to_txt(firstSheet);
-    } 
-    // Corregido: Tipo 'any' para evitar error de OfficeParserAST
-    else if (file.name.endsWith('.pptx')) {
-      extractedText = await new Promise<string>((resolve, reject) => {
-        officeparser.parseOffice(nodeBuffer, (data: any, err: any) => {
-          if (err) return reject("Error leyendo PowerPoint: " + err);
-          resolve(data as string);
-        });
+    } else if (file.name.endsWith('.pptx')) {
+      extractedText = await new Promise((res, rej) => {
+        officeparser.parseOffice(nodeBuffer, (d: any, e: any) => e ? rej(e) : res(d as string));
       });
-    } 
-    else {
+    } else {
       extractedText = nodeBuffer.toString('utf-8');
     }
 
-    if (!extractedText || !extractedText.trim()) throw new Error("No se pudo extraer texto");
-
     const textChunks = createChunks(extractedText);
-    
-    // Procesamiento paralelo de vectores
-    const rowsToInsert = await Promise.all(textChunks.map(async (chunk) => {
+    const rowsToInsert = [];
+
+    // PROCESADO SECUENCIAL CON "BORRADO DE EMERGENCIA"
+    for (const chunk of textChunks) {
+      // Si llevamos 8.5 segundos, paramos de procesar y guardamos lo que tengamos
+      // Así evitamos que Vercel mate la función a los 10s y el móvil se cuelgue
+      if (Date.now() - startTime > 8500) break;
+
       const output = await generateEmbedding(chunk, { pooling: 'mean', normalize: true });
-      return {
+      rowsToInsert.push({
         file_name: file.name,
         content: chunk,
-        embedding: Array.from(output.data) 
-      };
-    }));
+        embedding: Array.from(output.data)
+      });
+    }
+
+    if (rowsToInsert.length === 0) throw new Error("Archivo demasiado pesado para el servidor gratuito");
 
     const { error } = await supabase.from('document_sections').insert(rowsToInsert);
     if (error) throw error;
 
-    return NextResponse.json({ success: true, chunks: rowsToInsert.length });
+    return NextResponse.json({ 
+      success: true, 
+      chunks: rowsToInsert.length,
+      partial: rowsToInsert.length < textChunks.length 
+    });
 
   } catch (error: any) {
-    console.error("🔥 Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

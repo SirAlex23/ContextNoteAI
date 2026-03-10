@@ -1,69 +1,77 @@
+
+
 /* --- CORRECCIONES GLOBALES --- */
 
-/* Ajuste del indicador de scroll para que no estorbe (Imagen 4) */
+/* Indicador de scroll para que no estorbe al Workspace */
 .scroll-indicator {
-    bottom: 3rem !important; 
+    bottom: 2.5rem !important; 
     transition: all 0.3s ease;
 }
 
-/* Espaciado para el Workspace y evitar que se pise con el Hero */
+/* Espaciado base para el contenedor del Workspace */
 .workspace-wrapper {
-    margin-top: 8rem;
-    padding-bottom: 2rem;
+    margin-top: 4rem;
+    padding-bottom: 5rem;
 }
 
 /* --- DISEÑOS EXCLUSIVOS PARA MÓVIL (Media Query) --- */
 @media (max-width: 768px) {
-    /* Títulos más legibles en pantallas pequeñas */
+    
+    /* 1. AJUSTE DE POSICIÓN (Imagen 28 corregida) */
+    /* Bajamos el workspace para que no toque con el paso 3 del procesado RAG */
+    .workspace-wrapper {
+        margin-top: 14rem !important; 
+        padding-top: 1rem;
+    }
+
+    /* 2. TIPOGRAFÍA Y HERO */
     h1 {
-        font-size: 2.8rem !important; /* Ajustado para mejor encuadre */
+        font-size: 2.6rem !important; /* Más compacto para evitar saltos de línea feos */
         letter-spacing: -0.05em;
         line-height: 1.1;
     }
 
-    /* El panel de control (Imagen 11) ahora aprovecha el ancho */
+    /* 3. PANEL DE CONTROL (Imagen 11) */
     .panel-header {
         padding: 1.2rem !important;
+        gap: 1.5rem !important;
     }
 
     .panel-title {
-        font-size: 1.1rem !important;
+        font-size: 1.2rem !important;
     }
 
-    /* Zona de subida optimizada (Imagen 13) */
+    /* 4. ZONA DE SUBIDA (Imagen 13) */
     .upload-box {
-        height: 100px !important; /* Un poco más alto para facilitar el toque */
-        padding: 15px !important;
+        height: 90px !important;
+        padding: 10px !important;
     }
 
-    /* Ocultamos elementos que saturan la vista */
+    /* Ocultamos descripciones largas para limpiar la interfaz */
     .step-description {
         display: none;
     }
 
-    /* --- OPTIMIZACIÓN DEL CHAT EN MÓVIL --- */
+    /* 5. CHAT OPTIMIZADO PARA MÓVIL (Imagen 4 corregida) */
     .chat-container {
-        padding: 0.75rem !important;
-        max-height: 60vh; /* Para que no se coma toda la pantalla */
-    }
-
-    .message-bubble {
-        max-width: 92% !important; /* Burbujas más anchas en móvil */
-        font-size: 0.95rem;
-        padding: 0.8rem !important;
-    }
-
-    /* Input del chat fijo y accesible */
-    .chat-input-wrapper {
         padding: 0.5rem !important;
     }
 
-    /* Lista de archivos en horizontal con scroll si hay muchos */
-    .file-list {
-        display: flex;
-        overflow-x: auto;
-        gap: 0.5rem;
-        padding-bottom: 0.5rem;
+    .message-bubble {
+        max-width: 94% !important; /* Burbujas más anchas para leer mejor */
+        font-size: 0.85rem !important;
+        padding: 0.75rem !important;
+        border-radius: 1.25rem !important;
+    }
+
+    /* Ajuste del input para que no tape el contenido */
+    .chat-input-wrapper {
+        padding: 0.75rem !important;
+    }
+
+    /* 6. LLUVIA DE CÓDIGO */
+    canvas {
+        opacity: 0.15 !important; /* Menos distracciones en pantalla pequeña */
     }
 }
 
@@ -85,7 +93,7 @@
     animation: bounce-fast 0.6s infinite;
 }
 
-/* Efecto neón para el botón de destruir (Imagen 11) */
+/* Efecto neón para el botón de destruir */
 .btn-destruir-neon {
     transition: all 0.3s ease;
 }
@@ -96,3 +104,4 @@
     color: #fca5a5;
     box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
 }
+
