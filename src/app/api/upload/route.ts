@@ -8,8 +8,19 @@ import officeparser from 'officeparser';
 
 export const runtime = 'nodejs';
 
-// Función para dividir el texto en trozos manejables
-function createChunks(text: string, size: number = 1500) {
+// --- OPTIMIZACIÓN: Singleton para el modelo de embeddings ---
+let extractor: any = null;
+
+const getExtractor = async () => {
+  if (!extractor) {
+    // Solo se carga la primera vez que se usa la herramienta
+    extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+  }
+  return extractor;
+};
+
+// Aumentamos el tamaño a 2000 para que archivos largos (BOE) generen menos filas
+function createChunks(text: string, size: number = 2000) {
   const chunks = [];
   const words = text.split(/\s+/);
   let currentChunk = "";
@@ -31,14 +42,14 @@ export async function POST(req: NextRequest) {
     const file = formData.get('file') as File;
     if (!file) return NextResponse.json({ error: "No hay archivo" }, { status: 400 });
 
-    // Cargamos el modelo local para generar vectores
-    const generateEmbedding = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+    // Obtenemos el extractor ya cargado en memoria
+    const generateEmbedding = await getExtractor();
 
     const buffer = await file.arrayBuffer();
     const nodeBuffer = Buffer.from(buffer);
     let extractedText = "";
 
-    // --- Lógica de extracción por formato ---
+    // --- Extracción por formato ---
     if (file.type === "application/pdf") {
       const { text } = await extractText(buffer);
       extractedText = Array.isArray(text) ? text.join('\n') : text;
@@ -52,7 +63,7 @@ export async function POST(req: NextRequest) {
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
       extractedText = xlsx.utils.sheet_to_txt(firstSheet);
     } 
-    // Corregido: Usamos tipos 'any' en el callback para evitar el error de TypeScript
+    // Corregido: Tipo 'any' para evitar error de OfficeParserAST
     else if (file.name.endsWith('.pptx')) {
       extractedText = await new Promise<string>((resolve, reject) => {
         officeparser.parseOffice(nodeBuffer, (data: any, err: any) => {
@@ -65,19 +76,17 @@ export async function POST(req: NextRequest) {
       extractedText = nodeBuffer.toString('utf-8');
     }
 
-    if (!extractedText || !extractedText.trim()) throw new Error("No se pudo extraer texto del archivo");
+    if (!extractedText || !extractedText.trim()) throw new Error("No se pudo extraer texto");
 
     const textChunks = createChunks(extractedText);
     
-    // Generación de vectores para CADA trozo
+    // Procesamiento paralelo de vectores
     const rowsToInsert = await Promise.all(textChunks.map(async (chunk) => {
       const output = await generateEmbedding(chunk, { pooling: 'mean', normalize: true });
-      const embedding = Array.from(output.data);
-      
       return {
         file_name: file.name,
         content: chunk,
-        embedding: embedding 
+        embedding: Array.from(output.data) 
       };
     }));
 
@@ -87,7 +96,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, chunks: rowsToInsert.length });
 
   } catch (error: any) {
-    console.error("🔥 Error en Upload:", error);
+    console.error("🔥 Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

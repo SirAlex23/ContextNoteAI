@@ -8,8 +8,8 @@
 
 /* Espaciado para el Workspace y evitar que se pise con el Hero */
 .workspace-wrapper {
-    margin-top: 4rem;
-    padding-bottom: 5rem;
+    margin-top: 8rem;
+    padding-bottom: 2rem;
 }
 
 /* --- DISEÑOS EXCLUSIVOS PARA MÓVIL (Media Query) --- */
