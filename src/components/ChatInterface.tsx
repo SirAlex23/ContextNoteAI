@@ -1,79 +1,104 @@
 "use client";
 import React, { useState, useRef, useEffect } from 'react';
-import { Send } from 'lucide-react';
+import { Send, Bot, User, Loader2, Sparkles } from 'lucide-react';
 
-// CAMBIO: Ahora aceptamos fileNames (un array de strings)
-export default function ChatInterface({ fileNames }: { fileNames: string[] }) {
-  const [messages, setMessages] = useState<{role: string, text: string}[]>([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
+interface ChatInterfaceProps {
+  fileNames: string[];
+}
+
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export default function ChatInterface({ fileNames }: ChatInterfaceProps) {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, loading]);
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
 
-  const sendMessage = async () => {
-    if (!input.trim() || loading) return;
-    const userText = input;
-    setInput("");
-    setMessages(prev => [...prev, { role: 'user', text: userText }]);
-    setLoading(true);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || isLoading) return;
+
+    const userMsg: Message = { role: 'user', content: input };
+    setMessages(prev => [...prev, userMsg]);
+    setInput('');
+    setIsLoading(true);
 
     try {
-      const res = await fetch('/api/chat', {
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          message: userText, 
-          fileNames // Enviamos el array completo al backend
-        }),
+        // IMPORTANTE: Enviamos el array completo de archivos
+        body: JSON.stringify({ message: input, fileNames: fileNames }),
       });
-      const data = await res.json();
-      if (data.text) setMessages(prev => [...prev, { role: 'ai', text: data.text }]);
-    } catch (e) {
-      setMessages(prev => [...prev, { role: 'ai', text: "Error de conexión con el servidor." }]);
+
+      const data = await response.json();
+      if (response.ok) {
+        setMessages(prev => [...prev, { role: 'assistant', content: data.answer }]);
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: "Error: No se pudo conectar con el motor RAG." }]);
+      }
+    } catch (error) {
+      setMessages(prev => [...prev, { role: 'assistant', content: "Error de red." }]);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="flex flex-col h-full w-full">
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] p-4 rounded-3xl text-sm leading-relaxed shadow-sm ${
-              m.role === 'user' 
-                ? 'bg-blue-600 text-white rounded-tr-none' 
-                : 'bg-slate-800/80 text-slate-100 border border-slate-700 rounded-tl-none'
-            }`}>
-              {m.text}
+    <div className="flex flex-col h-full bg-black/10">
+      {/* Área de Mensajes - Ocupa todo el espacio disponible */}
+      <div 
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto p-6 md:p-10 space-y-6"
+      >
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full opacity-30 text-center">
+            <Sparkles className="w-10 h-10 mb-4 text-blue-500" />
+            <p className="text-sm">Analizando {fileNames.length} documentos...</p>
+          </div>
+        )}
+
+        {messages.map((msg, i) => (
+          <div key={i} className={`flex items-start gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+            <div className={`p-2 rounded-lg ${msg.role === 'user' ? 'bg-blue-600' : 'bg-slate-800'}`}>
+              {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4 text-blue-400" />}
+            </div>
+            <div className={`max-w-[80%] p-4 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-blue-600/20 text-blue-100' : 'bg-slate-900/80 text-slate-300'}`}>
+              {msg.content}
             </div>
           </div>
         ))}
-        {loading && <div className="text-xs text-blue-400 animate-pulse font-mono px-2">Analizando documentos...</div>}
+        {isLoading && <Loader2 className="w-5 h-5 animate-spin text-blue-500 mx-auto" />}
       </div>
 
-      <div className="p-6 bg-slate-900/40 border-t border-slate-800">
-        <div className="relative flex items-center gap-2">
-          {/* text-slate-900 asegura que la letra sea negra en la barra blanca */}
-          <input 
+      {/* Input de Chat - Pegado al fondo sin huecos */}
+      <div className="p-6 bg-slate-900/80 border-t border-slate-800">
+        <form onSubmit={handleSubmit} className="relative max-w-4xl mx-auto">
+          <input
+            type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-            placeholder="Haz una pregunta sobre tus archivos..."
-            className="flex-1 bg-white text-slate-900 rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none shadow-xl font-medium"
+            placeholder="Escribe tu pregunta aquí..."
+            className="w-full bg-black/60 border border-slate-700 rounded-xl py-4 pl-6 pr-14 text-sm focus:border-blue-500/50 outline-none transition-all"
           />
-          <button 
-            onClick={sendMessage} 
-            disabled={loading}
-            className="absolute right-2 p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-all shadow-lg"
-          >
-            <Send className="w-5 h-5" />
+          <button type="submit" className="absolute right-2 top-2 p-3 bg-blue-600 rounded-lg">
+            <Send className="w-4 h-4 text-white" />
           </button>
-        </div>
+        </form>
+        <p className="text-[9px] text-center text-slate-600 mt-4 uppercase tracking-widest">
+          ContextNote.AI // Powered by Llama 3.3 70B & Groq
+        </p>
       </div>
     </div>
   );
 }
+

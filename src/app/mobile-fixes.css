@@ -1,0 +1,98 @@
+/* --- CORRECCIONES GLOBALES --- */
+
+/* Ajuste del indicador de scroll para que no estorbe (Imagen 4) */
+.scroll-indicator {
+    bottom: 3rem !important; 
+    transition: all 0.3s ease;
+}
+
+/* Espaciado para el Workspace y evitar que se pise con el Hero */
+.workspace-wrapper {
+    margin-top: 4rem;
+    padding-bottom: 5rem;
+}
+
+/* --- DISEÑOS EXCLUSIVOS PARA MÓVIL (Media Query) --- */
+@media (max-width: 768px) {
+    /* Títulos más legibles en pantallas pequeñas */
+    h1 {
+        font-size: 2.8rem !important; /* Ajustado para mejor encuadre */
+        letter-spacing: -0.05em;
+        line-height: 1.1;
+    }
+
+    /* El panel de control (Imagen 11) ahora aprovecha el ancho */
+    .panel-header {
+        padding: 1.2rem !important;
+    }
+
+    .panel-title {
+        font-size: 1.1rem !important;
+    }
+
+    /* Zona de subida optimizada (Imagen 13) */
+    .upload-box {
+        height: 100px !important; /* Un poco más alto para facilitar el toque */
+        padding: 15px !important;
+    }
+
+    /* Ocultamos elementos que saturan la vista */
+    .step-description {
+        display: none;
+    }
+
+    /* --- OPTIMIZACIÓN DEL CHAT EN MÓVIL --- */
+    .chat-container {
+        padding: 0.75rem !important;
+        max-height: 60vh; /* Para que no se coma toda la pantalla */
+    }
+
+    .message-bubble {
+        max-width: 92% !important; /* Burbujas más anchas en móvil */
+        font-size: 0.95rem;
+        padding: 0.8rem !important;
+    }
+
+    /* Input del chat fijo y accesible */
+    .chat-input-wrapper {
+        padding: 0.5rem !important;
+    }
+
+    /* Lista de archivos en horizontal con scroll si hay muchos */
+    .file-list {
+        display: flex;
+        overflow-x: auto;
+        gap: 0.5rem;
+        padding-bottom: 0.5rem;
+    }
+}
+
+/* --- ANIMACIONES Y EFECTOS --- */
+
+/* Animación de flecha rápida */
+@keyframes bounce-fast {
+    0%, 100% { 
+        transform: translateY(-25%); 
+        animation-timing-function: cubic-bezier(0.8,0,1,1); 
+    }
+    50% { 
+        transform: none; 
+        animation-timing-function: cubic-bezier(0,0,0.2,1); 
+    }
+}
+
+.animate-bounce-fast {
+    animation: bounce-fast 0.6s infinite;
+}
+
+/* Efecto neón para el botón de destruir (Imagen 11) */
+.btn-destruir-neon {
+    transition: all 0.3s ease;
+}
+
+.btn-destruir-neon:hover {
+    background-color: rgba(239, 68, 68, 0.2);
+    border-color: #ef4444;
+    color: #fca5a5;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+}
