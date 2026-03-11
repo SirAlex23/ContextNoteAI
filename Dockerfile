@@ -18,3 +18,4 @@ EXPOSE 7860
 
 # Comando para arrancar la app en el puerto de Hugging Face
 CMD ["npm", "start", "--", "-p", "7860", "-H", "0.0.0.0"]
+
