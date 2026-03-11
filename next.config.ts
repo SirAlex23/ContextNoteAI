@@ -1,17 +1,14 @@
+import type { NextConfig } from "next";
 
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+const nextConfig: NextConfig = {
   typescript: {
-    // Esto evita que el build falle por las variables de entorno ausentes
     ignoreBuildErrors: true,
   },
-  eslint: {
-    // Esto ignora advertencias de estilo que puedan frenar el proceso
-    ignoreDuringBuilds: true,
-  },
-  // Optimización para despliegues en Docker como el tuyo
-  output: 'standalone',
+  // Eliminamos el bloque 'eslint' que causa el error
+  // para que TypeScript deje de marcar el error rojo.
 };
 
 export default nextConfig;
+
+
 
