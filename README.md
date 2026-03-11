@@ -1,3 +1,14 @@
+---
+title: ContextNoteAI
+emoji: 📑
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
+
+
 🌀 ContextNote.AI – Inteligencia Documental RAG
 
 ContextNote.AI es una estación de trabajo avanzada diseñada para programadores y estudiantes que necesitan interactuar con grandes volúmenes de información. Utiliza una arquitectura RAG (Retrieval-Augmented Generation) para procesar múltiples archivos simultáneamente con precisión y privacidad.
