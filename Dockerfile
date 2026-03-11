@@ -1,5 +1,5 @@
 # Usa una imagen de Node estable
-FROM node:18-slim
+FROM node:20-slim
 
 # Crea el directorio de la app
 WORKDIR /app
