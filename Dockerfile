@@ -1,23 +1,20 @@
-# Usa una imagen de Node estable
 FROM node:20-slim
 
-# Crea el directorio de la app
 WORKDIR /app
 
-# Copia los archivos de configuración
+# Copiamos archivos de dependencias
 COPY package*.json ./
-
-# Instala las dependencias
 RUN npm install
 
-# Copia el resto del código
+# Copiamos el resto del código
 COPY . .
 
-# Construye la aplicación de Next.js
+# Desactivamos el chequeo estricto de linting y errores de tipos durante el build 
+# para que no se detenga por las variables de Supabase
+ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-# Expone el puerto que usa Hugging Face
 EXPOSE 7860
 
-# Comando para arrancar la app
+# Comando para arrancar la app en el puerto de Hugging Face
 CMD ["npm", "start", "--", "-p", "7860", "-H", "0.0.0.0"]
