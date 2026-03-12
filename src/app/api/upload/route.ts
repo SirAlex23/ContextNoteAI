@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { extractText } from 'unpdf'; 
 import mammoth from 'mammoth';
-import * as xlsx from 'xlsx';
 import { pipeline } from '@xenova/transformers';
 import officeparser from 'officeparser';
 
@@ -14,8 +13,11 @@ const getExtractor = async () => {
   return extractor;
 };
 
-// Chunks más grandes (4000) = menos ciclos de CPU = más velocidad
-function createChunks(text: string, size: number = 4000) {
+/**
+ * Optimizamos el tamaño del chunk a 1000. 
+ * Esto evita que el servidor agote la memoria RAM al generar embeddings.
+ */
+function createChunks(text: string, size: number = 1000) {
   const chunks = [];
   const words = text.split(/\s+/);
   let currentChunk = "";
@@ -31,7 +33,7 @@ function createChunks(text: string, size: number = 4000) {
 }
 
 export async function POST(req: NextRequest) {
-  const startTime = Date.now(); // Control de tiempo para evitar el corte de Vercel
+  const startTime = Date.now(); 
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File;
@@ -60,11 +62,13 @@ export async function POST(req: NextRequest) {
     const textChunks = createChunks(extractedText);
     const rowsToInsert = [];
 
-    // PROCESADO SECUENCIAL CON "BORRADO DE EMERGENCIA"
+    // PROCESADO SECUENCIAL
     for (const chunk of textChunks) {
-      // Si llevamos 8.5 segundos, paramos de procesar y guardamos lo que tengamos
-      // Así evitamos que Vercel mate la función a los 10s y el móvil se cuelgue
-      if (Date.now() - startTime > 8500) break;
+      /**
+       * Aumentamos el margen de tiempo a 25 segundos (25000ms).
+       * Hugging Face es más lento que Vercel o tu PC local y necesita este tiempo extra.
+       */
+      if (Date.now() - startTime > 25000) break;
 
       const output = await generateEmbedding(chunk, { pooling: 'mean', normalize: true });
       rowsToInsert.push({
@@ -74,7 +78,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    if (rowsToInsert.length === 0) throw new Error("Archivo demasiado pesado para el servidor gratuito");
+    if (rowsToInsert.length === 0) throw new Error("El proceso tardó demasiado o el archivo no tiene texto procesable");
 
     const { error } = await supabase.from('document_sections').insert(rowsToInsert);
     if (error) throw error;
@@ -86,6 +90,16 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    /**
+     * VITAL: Imprimimos el error real en la consola del servidor.
+     * Esto aparecerá en la pestaña "Logs > Container" de Hugging Face.
+     */
+    console.error("DETALLE DEL ERROR EN EL SERVIDOR:", error);
+    
+    return NextResponse.json({ 
+      error: error.message,
+      stack: error.stack 
+    }, { status: 500 });
   }
 }
+
