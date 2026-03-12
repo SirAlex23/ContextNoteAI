@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import Groq from 'groq-sdk';
-import { pipeline } from '@xenova/transformers';
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -9,17 +8,20 @@ export async function POST(req: NextRequest) {
   try {
     const { message, fileNames } = await req.json();
 
-    // 1. Convertir la pregunta del usuario en un vector numérico (Embedding)
-    const generateEmbedding = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-    const output = await generateEmbedding(message, { pooling: 'mean', normalize: true });
-    const queryEmbedding = Array.from(output.data);
+    // 1. Convertir la pregunta en un vector usando Groq (768 dimensiones)
+    // Usamos el mismo modelo que en el upload para que sean compatibles
+    const embeddingResponse = await groq.embeddings.create({
+      model: "nomic-embed-text-v1_5",
+      input: message,
+    });
+    
+    const queryEmbedding = embeddingResponse.data[0].embedding;
 
-    // 2. Llamar a la función RPC corregida en Supabase
-    // Esta parte ahora coincide con el SQL que devuelve: id, file_name, content y similarity
+    // 2. Llamar a la función RPC en Supabase
     const { data: matchedDocuments, error } = await supabase.rpc('match_documents', {
       query_embedding: queryEmbedding,
-      match_threshold: 0.01, // Umbral bajo para encontrar siempre algo de contexto
-      match_count: 8, // Traemos los 8 trozos más relevantes
+      match_threshold: 0.2, // Ajustado para mayor precisión con 768 dimensiones
+      match_count: 8,
       filter_file_names: fileNames || [] 
     });
 
@@ -28,30 +30,27 @@ export async function POST(req: NextRequest) {
       throw error;
     }
 
-    // Si no hay resultados, devolvemos un mensaje amigable en lugar de un error 404
     if (!matchedDocuments || matchedDocuments.length === 0) {
       return NextResponse.json({ 
-        answer: "No he encontrado información específica en los documentos seleccionados que responda a tu pregunta." 
+        answer: "No he encontrado información relevante en los documentos seleccionados." 
       });
     }
 
-    // 3. Construir el contexto para la IA
+    // 3. Construir el contexto
     const relevantContext = matchedDocuments
       .map((doc: any) => `[ARCHIVO: ${doc.file_name}]\n${doc.content}`)
       .join("\n\n---\n\n");
 
-    // 4. Generar respuesta con Llama 3.3 en Groq
+    // 4. Generar respuesta con Llama 3.3
     const chatCompletion = await groq.chat.completions.create({
       messages: [
         {
           role: "system",
-          content: `Eres ContextNote.AI v3.5, un analista experto. 
-          INSTRUCCIONES:
-          - Usa el contexto proporcionado abajo para responder.
-          - Si la información no está en los archivos, dilo. No inventes datos.
-          - Mantén un tono profesional y directo.
+          content: `Eres ContextNote.AI v3.5. 
+          Usa el contexto para responder de forma profesional.
+          Si no está en el contexto, no inventes nada.
           
-          CONTEXTO DE ARCHIVOS ENCONTRADO:
+          CONTEXTO:
           ${relevantContext}`
         },
         { role: "user", content: message },
@@ -60,13 +59,12 @@ export async function POST(req: NextRequest) {
       temperature: 0.2,
     });
 
-    // Devolvemos la respuesta formateada para tu componente
     return NextResponse.json({ answer: chatCompletion.choices[0]?.message?.content });
 
   } catch (error: any) {
-    console.error("🔥 Error detallado en Chat:", error);
+    console.error("🔥 Error en Chat:", error);
     return NextResponse.json(
-      { error: "Error en el motor de búsqueda: " + (error.message || "Desconocido") }, 
+      { error: "Error en el chat: " + (error.message || "Desconocido") }, 
       { status: 500 }
     );
   }

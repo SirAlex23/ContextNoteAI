@@ -1,51 +1,76 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { extractText } from 'unpdf'; 
+import { extractText } from 'unpdf';
 import mammoth from 'mammoth';
-import { pipeline } from '@xenova/transformers';
 import officeparser from 'officeparser';
+import Groq from 'groq-sdk';
 
+// Esto extiende el límite a 60 segundos en Vercel plan gratuito
+export const maxDuration = 60;
 export const runtime = 'nodejs';
 
-let extractor: any = null;
-const getExtractor = async () => {
-  if (!extractor) extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-  return extractor;
-};
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-/**
- * Optimizamos el tamaño del chunk a 1000. 
- * Esto evita que el servidor agote la memoria RAM al generar embeddings.
- */
-function createChunks(text: string, size: number = 1000) {
-  const chunks = [];
+// Chunks más grandes = menos llamadas a la API = más rápido
+function createChunks(text: string, size: number = 512) {
+  const chunks: string[] = [];
   const words = text.split(/\s+/);
-  let currentChunk = "";
+  let current = '';
   for (const word of words) {
-    if ((currentChunk + word).length > size) {
-      chunks.push(currentChunk.trim());
-      currentChunk = "";
+    if ((current + ' ' + word).trim().length > size) {
+      if (current) chunks.push(current.trim());
+      current = word;
+    } else {
+      current = current ? current + ' ' + word : word;
     }
-    currentChunk += word + " ";
   }
-  if (currentChunk) chunks.push(currentChunk.trim());
-  return chunks;
+  if (current) chunks.push(current.trim());
+  return chunks.filter(c => c.length > 20); // ignorar chunks vacíos
+}
+
+// Llama a Groq embeddings en lotes para no saturar el rate limit
+async function getEmbeddingsInBatches(chunks: string[], batchSize = 10) {
+  const allEmbeddings: number[][] = [];
+  
+  for (let i = 0; i < chunks.length; i += batchSize) {
+    const batch = chunks.slice(i, i + batchSize);
+    
+    const promises = batch.map(chunk =>
+      groq.embeddings.create({
+        model: 'nomic-embed-text-v1_5', // gratis en Groq
+        input: chunk,
+      })
+    );
+    
+    const results = await Promise.all(promises);
+    results.forEach(r => {
+      if (r.data && r.data[0]) {
+        allEmbeddings.push(r.data[0].embedding as number[]);
+      }
+    });
+    
+    // Pequeña pausa entre lotes para respetar rate limits
+    if (i + batchSize < chunks.length) {
+      await new Promise(res => setTimeout(res, 200));
+    }
+  }
+  
+  return allEmbeddings;
 }
 
 export async function POST(req: NextRequest) {
-  const startTime = Date.now(); 
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File;
-    if (!file) return NextResponse.json({ error: "No hay archivo" }, { status: 400 });
+    if (!file) return NextResponse.json({ error: 'No hay archivo' }, { status: 400 });
 
-    const generateEmbedding = await getExtractor();
     const buffer = await file.arrayBuffer();
     const nodeBuffer = Buffer.from(buffer);
-    let extractedText = "";
+    let extractedText = '';
 
-    // Extracción según formato
-    if (file.type === "application/pdf") {
+    // Extracción de texto según formato
+    if (file.type === 'application/pdf') {
       const { text } = await extractText(buffer);
       extractedText = Array.isArray(text) ? text.join('\n') : text;
     } else if (file.name.endsWith('.docx')) {
@@ -59,47 +84,40 @@ export async function POST(req: NextRequest) {
       extractedText = nodeBuffer.toString('utf-8');
     }
 
-    const textChunks = createChunks(extractedText);
-    const rowsToInsert = [];
-
-    // PROCESADO SECUENCIAL
-    for (const chunk of textChunks) {
-      /**
-       * Aumentamos el margen de tiempo a 25 segundos (25000ms).
-       * Hugging Face es más lento que Vercel o tu PC local y necesita este tiempo extra.
-       */
-      if (Date.now() - startTime > 25000) break;
-
-      const output = await generateEmbedding(chunk, { pooling: 'mean', normalize: true });
-      rowsToInsert.push({
-        file_name: file.name,
-        content: chunk,
-        embedding: Array.from(output.data)
-      });
+    if (!extractedText.trim()) {
+      return NextResponse.json({ error: 'No se pudo extraer texto del archivo' }, { status: 400 });
     }
 
-    if (rowsToInsert.length === 0) throw new Error("El proceso tardó demasiado o el archivo no tiene texto procesable");
+    const chunks = createChunks(extractedText);
+    
+    if (chunks.length === 0) {
+      return NextResponse.json({ error: 'El archivo no contiene texto procesable' }, { status: 400 });
+    }
+
+    // Generar todos los embeddings via Groq (rápido, sin descarga de modelos)
+    const embeddings = await getEmbeddingsInBatches(chunks);
+
+    // Construir filas para Supabase
+    const rowsToInsert = chunks.map((chunk, i) => ({
+      file_name: file.name,
+      content: chunk,
+      embedding: embeddings[i],
+    }));
 
     const { error } = await supabase.from('document_sections').insert(rowsToInsert);
     if (error) throw error;
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       chunks: rowsToInsert.length,
-      partial: rowsToInsert.length < textChunks.length 
+      partial: false,
     });
 
   } catch (error: any) {
-    /**
-     * VITAL: Imprimimos el error real en la consola del servidor.
-     * Esto aparecerá en la pestaña "Logs > Container" de Hugging Face.
-     */
-    console.error("DETALLE DEL ERROR EN EL SERVIDOR:", error);
-    
-    return NextResponse.json({ 
+    console.error('ERROR EN UPLOAD:', error);
+    return NextResponse.json({
       error: error.message,
-      stack: error.stack 
+      stack: error.stack,
     }, { status: 500 });
   }
 }
-
