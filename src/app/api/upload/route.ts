@@ -1,19 +1,33 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { extractText } from 'unpdf';
 import mammoth from 'mammoth';
 import officeparser from 'officeparser';
-import Groq from 'groq-sdk';
 
-// Esto extiende el límite a 60 segundos en Vercel plan gratuito
 export const maxDuration = 60;
 export const runtime = 'nodejs';
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+async function getEmbedding(text: string): Promise<number[]> {
+  const response = await fetch(
+    'https://api-inference.huggingface.co/models/nomic-ai/nomic-embed-text-v1.5',
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ inputs: text }),
+    }
+  );
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`HuggingFace error: ${err}`);
+  }
+  const data = await response.json();
+  return Array.isArray(data[0]) ? data[0] : data;
+}
 
-// Chunks más grandes = menos llamadas a la API = más rápido
-function createChunks(text: string, size: number = 512) {
+function createChunks(text: string, size: number = 512): string[] {
   const chunks: string[] = [];
   const words = text.split(/\s+/);
   let current = '';
@@ -26,37 +40,7 @@ function createChunks(text: string, size: number = 512) {
     }
   }
   if (current) chunks.push(current.trim());
-  return chunks.filter(c => c.length > 20); // ignorar chunks vacíos
-}
-
-// Llama a Groq embeddings en lotes para no saturar el rate limit
-async function getEmbeddingsInBatches(chunks: string[], batchSize = 10) {
-  const allEmbeddings: number[][] = [];
-  
-  for (let i = 0; i < chunks.length; i += batchSize) {
-    const batch = chunks.slice(i, i + batchSize);
-    
-    const promises = batch.map(chunk =>
-      groq.embeddings.create({
-        model: 'nomic-embed-text-v1.5', // gratis en Groq
-        input: chunk,
-      })
-    );
-    
-    const results = await Promise.all(promises);
-    results.forEach(r => {
-      if (r.data && r.data[0]) {
-        allEmbeddings.push(r.data[0].embedding as number[]);
-      }
-    });
-    
-    // Pequeña pausa entre lotes para respetar rate limits
-    if (i + batchSize < chunks.length) {
-      await new Promise(res => setTimeout(res, 200));
-    }
-  }
-  
-  return allEmbeddings;
+  return chunks.filter(c => c.length > 20);
 }
 
 export async function POST(req: NextRequest) {
@@ -69,7 +53,6 @@ export async function POST(req: NextRequest) {
     const nodeBuffer = Buffer.from(buffer);
     let extractedText = '';
 
-    // Extracción de texto según formato
     if (file.type === 'application/pdf') {
       const { text } = await extractText(buffer);
       extractedText = Array.isArray(text) ? text.join('\n') : text;
@@ -89,20 +72,22 @@ export async function POST(req: NextRequest) {
     }
 
     const chunks = createChunks(extractedText);
-    
     if (chunks.length === 0) {
       return NextResponse.json({ error: 'El archivo no contiene texto procesable' }, { status: 400 });
     }
 
-    // Generar todos los embeddings via Groq (rápido, sin descarga de modelos)
-    const embeddings = await getEmbeddingsInBatches(chunks);
-
-    // Construir filas para Supabase
-    const rowsToInsert = chunks.map((chunk, i) => ({
-      file_name: file.name,
-      content: chunk,
-      embedding: embeddings[i],
-    }));
+    // Procesar embeddings secuencialmente para no saturar HuggingFace
+    const rowsToInsert = [];
+    for (const chunk of chunks) {
+      const embedding = await getEmbedding(chunk);
+      rowsToInsert.push({
+        file_name: file.name,
+        content: chunk,
+        embedding,
+      });
+      // Pequeña pausa para respetar rate limits
+      await new Promise(res => setTimeout(res, 100));
+    }
 
     const { error } = await supabase.from('document_sections').insert(rowsToInsert);
     if (error) throw error;
@@ -115,9 +100,6 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     console.error('ERROR EN UPLOAD:', error);
-    return NextResponse.json({
-      error: error.message,
-      stack: error.stack,
-    }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
