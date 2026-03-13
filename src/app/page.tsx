@@ -1,3 +1,4 @@
+
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import FileUpload from '@/components/FileUpload';
@@ -5,7 +6,6 @@ import ChatInterface from '@/components/ChatInterface';
 import { ChevronDown, Sparkles, Trash2, ShieldCheck } from 'lucide-react';
 import './mobile-fixes.css';
 
-// --- LLUVIA DE CÓDIGO NATURAL Y MULTICOLOR ---
 const CodeRain = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -21,22 +21,17 @@ const CodeRain = () => {
     const fontSize = 15;
     const columns = canvas.width / fontSize;
     const drops = Array(Math.floor(columns)).fill(1);
-
     const colors = ['#1e40af', '#3b82f6', '#6366f1', '#2dd4bf', '#1e293b'];
 
     const draw = () => {
       ctx.fillStyle = "rgba(0, 0, 0, 0.08)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.font = `${fontSize}px monospace`;
-
       for (let i = 0; i < drops.length; i++) {
         ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
         const text = codes[Math.floor(Math.random() * codes.length)];
         ctx.fillText(text, i * fontSize, drops[i] * fontSize);
-
-        if (drops[i] * fontSize > canvas.height && Math.random() > 0.985) {
-          drops[i] = 0;
-        }
+        if (drops[i] * fontSize > canvas.height && Math.random() > 0.985) drops[i] = 0;
         drops[i] += 0.75;
       }
     };
@@ -78,7 +73,7 @@ export default function Home() {
             <Sparkles className="w-4 h-4" />
             <span>ContextNote.AI // Intelligence v3.0</span>
           </div>
-          
+
           <h1 className="text-6xl md:text-8xl font-black tracking-tighter text-white">
             Context<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-500">Note.AI</span>
           </h1>
@@ -91,7 +86,7 @@ export default function Home() {
               Nuestra herramienta utiliza arquitectura RAG avanzada para permitirte chatear con múltiples archivos de forma simultánea.
             </p>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-10">
             {[
               { id: 1, title: "Sube tu archivo", desc: "PDF, Word, Excel o bloques de código fuente." },
@@ -107,23 +102,24 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Indicador de scroll con más espacio */}
         <div className="absolute bottom-10 scroll-indicator flex flex-col items-center text-slate-600">
           <span className="text-[10px] font-bold mb-2 uppercase tracking-widest">Workspace</span>
           <ChevronDown className="w-5 h-5 animate-bounce-fast text-blue-500" />
         </div>
       </section>
 
-      <section className="relative workspace-wrapper py-20 px-4 max-w-6xl mx-auto z-10">
+      {/* mt-20 añadido para separar el workspace de la sección hero */}
+      <section className="relative workspace-wrapper py-20 px-4 max-w-6xl mx-auto z-10 mt-20">
         <div className="bg-slate-900/40 backdrop-blur-xl border border-slate-800 rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col min-h-[700px]">
-          
+
           <div className="panel-header p-8 border-b border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-8 bg-slate-900/30">
             <div className="space-y-2">
               <h2 className="panel-title text-2xl font-bold text-white">Panel de Control</h2>
               <p className="text-slate-500 text-xs">Gestiona tus documentos y chatea con la IA</p>
               {fileNames.length > 0 && (
-                /* Clase CSS 'btn-destruir-neon' añadida para el efecto rojo */
-                <button 
-                  onClick={destroySession} 
+                <button
+                  onClick={destroySession}
                   className="mt-4 flex items-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/30 text-red-400 text-[10px] font-bold uppercase rounded-lg transition-all duration-300 btn-destruir-neon"
                 >
                   <Trash2 className="w-3 h-3" /> Destruir Sesión

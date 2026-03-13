@@ -7,6 +7,9 @@ import officeparser from 'officeparser';
 export const maxDuration = 60;
 export const runtime = 'nodejs';
 
+const MAX_CHUNKS = 80;
+const MAX_FILE_SIZE_MB = 4.5;
+
 async function getEmbedding(text: string): Promise<number[]> {
   const response = await fetch(
     'https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction',
@@ -49,6 +52,14 @@ export async function POST(req: NextRequest) {
     const file = formData.get('file') as File;
     if (!file) return NextResponse.json({ error: 'No hay archivo' }, { status: 400 });
 
+    // Validar tamaño máximo
+    const fileSizeMB = file.size / (1024 * 1024);
+    if (fileSizeMB > MAX_FILE_SIZE_MB) {
+      return NextResponse.json({ 
+        error: `Archivo demasiado grande (${fileSizeMB.toFixed(1)}MB). Máximo permitido: ${MAX_FILE_SIZE_MB}MB` 
+      }, { status: 400 });
+    }
+
     const buffer = await file.arrayBuffer();
     const nodeBuffer = Buffer.from(buffer);
     let extractedText = '';
@@ -71,13 +82,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No se pudo extraer texto del archivo' }, { status: 400 });
     }
 
-    const chunks = createChunks(extractedText);
-    if (chunks.length === 0) {
+    const allChunks = createChunks(extractedText);
+    if (allChunks.length === 0) {
       return NextResponse.json({ error: 'El archivo no contiene texto procesable' }, { status: 400 });
     }
 
+    const chunksToProcess = allChunks.slice(0, MAX_CHUNKS);
+    const wasLimited = allChunks.length > MAX_CHUNKS;
+
     const rowsToInsert = [];
-    for (const chunk of chunks) {
+    for (const chunk of chunksToProcess) {
       const embedding = await getEmbedding(chunk);
       rowsToInsert.push({
         file_name: file.name,
@@ -93,7 +107,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       chunks: rowsToInsert.length,
-      partial: false,
+      total_chunks: allChunks.length,
+      partial: wasLimited,
+      message: wasLimited
+        ? `Documento largo: se procesaron ${MAX_CHUNKS} de ${allChunks.length} fragmentos.`
+        : null,
     });
 
   } catch (error: any) {
