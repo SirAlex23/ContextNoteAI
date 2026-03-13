@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     // 1. Convertir la pregunta en un vector usando Groq (768 dimensiones)
     // Usamos el mismo modelo que en el upload para que sean compatibles
     const embeddingResponse = await groq.embeddings.create({
-      model: "nomic-embed-text-v1_5",
+      model: "nomic-embed-text-v1.5",
       input: message,
     });
     

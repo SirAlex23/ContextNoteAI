@@ -38,7 +38,7 @@ async function getEmbeddingsInBatches(chunks: string[], batchSize = 10) {
     
     const promises = batch.map(chunk =>
       groq.embeddings.create({
-        model: 'nomic-embed-text-v1_5', // gratis en Groq
+        model: 'nomic-embed-text-v1.5', // gratis en Groq
         input: chunk,
       })
     );
