@@ -6,7 +6,7 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 async function getEmbedding(text: string): Promise<number[]> {
   const response = await fetch(
-    'https://router.huggingface.co/hf-inference/models/nomic-ai/nomic-embed-text-v1.5/pipeline/feature-extraction',
+    'https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction',
     {
       method: 'POST',
       headers: {
