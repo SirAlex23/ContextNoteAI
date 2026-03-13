@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
 
 async function getEmbedding(text: string): Promise<number[]> {
   const response = await fetch(
-    'https://router.huggingface.co/models/nomic-ai/nomic-embed-text-v1.5',
+    'https://router.huggingface.co/hf-inference/models/nomic-ai/nomic-embed-text-v1.5/pipeline/feature-extraction',
     {
       method: 'POST',
       headers: {
@@ -76,7 +76,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'El archivo no contiene texto procesable' }, { status: 400 });
     }
 
-    // Procesar embeddings secuencialmente para no saturar HuggingFace
     const rowsToInsert = [];
     for (const chunk of chunks) {
       const embedding = await getEmbedding(chunk);
@@ -85,7 +84,6 @@ export async function POST(req: NextRequest) {
         content: chunk,
         embedding,
       });
-      // Pequeña pausa para respetar rate limits
       await new Promise(res => setTimeout(res, 100));
     }
 

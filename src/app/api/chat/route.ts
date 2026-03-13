@@ -6,7 +6,7 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 async function getEmbedding(text: string): Promise<number[]> {
   const response = await fetch(
-    'https://router.huggingface.co/models/nomic-ai/nomic-embed-text-v1.5',
+    'https://router.huggingface.co/hf-inference/models/nomic-ai/nomic-embed-text-v1.5/pipeline/feature-extraction',
     {
       method: 'POST',
       headers: {
@@ -28,10 +28,8 @@ export async function POST(req: NextRequest) {
   try {
     const { message, fileNames } = await req.json();
 
-    // 1. Embedding de la pregunta via HuggingFace
     const queryEmbedding = await getEmbedding(message);
 
-    // 2. Búsqueda semántica en Supabase
     const { data: matchedDocuments, error } = await supabase.rpc('match_documents', {
       query_embedding: queryEmbedding,
       match_threshold: 0.2,
@@ -50,12 +48,10 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 3. Construir contexto
     const relevantContext = matchedDocuments
       .map((doc: any) => `[ARCHIVO: ${doc.file_name}]\n${doc.content}`)
       .join('\n\n---\n\n');
 
-    // 4. Respuesta con Llama 3.3 via Groq
     const chatCompletion = await groq.chat.completions.create({
       messages: [
         {
