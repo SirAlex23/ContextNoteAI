@@ -17,7 +17,7 @@ ContextNote.AI es una estación de trabajo avanzada diseñada para programadores
 
 🧠 Cerebro Antisaturación (Chunking): Fragmentación inteligente de documentos para procesar tesis, BOEs o códigos extensos sin errores de contexto.
 
-📂 Soporte Multiformato: Lee y analiza archivos PDF, Word (.docx), Excel (.xlsx) y múltiples lenguajes de programación (.java, .py, .js, .ts).
+📂 Soporte Multiformato: Lee y analiza archivos PDF, Word (.docx), Excel (.xlsx) y múltiples lenguajes de programación (.Java, .py, .js, .ts).
 
 🔗 Interacción Multi-archivo: Sube varios documentos a la vez; la IA cruzará datos entre ellos para darte respuestas integrales.
 
